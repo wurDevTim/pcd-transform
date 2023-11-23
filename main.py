@@ -2,6 +2,8 @@ import open3d as o3d
 import numpy as np
 from pathlib import Path
 from time import sleep
+from copy import deepcopy
+from scipy.spatial.transform import Rotation as R
 
 def pick_points(pcd):
     print("")
@@ -31,11 +33,30 @@ if __name__ == '__main__':
 
         selected_points = pick_points(pcd)
         origin_idx = selected_points[-1]
+        plain_points = selected_points[:-1]
+
+        # Rotate the pointcloud
+        p0 = pcd.points[plain_points[0]]
+        p1 = pcd.points[plain_points[1]]
+        p2 = pcd.points[plain_points[2]]
+        # compute vectors
+        v0 = np.array(p0) - np.array(p1)
+        v1 = np.array(p2) - np.array(p1)
+
+        target_vectors = np.array([[1, 0, 0], [0, 0, 1]])
+        source_vectors = np.vstack((v0, v1))
+        weights = np.array([0.7, 0.3])
+        # Rotation vector b to vector a
+        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.transform.Rotation.align_vectors.html#scipy.spatial.transform.Rotation.align_vectors
+        rotation, rssd = R.align_vectors(a=target_vectors, b=source_vectors, weights=weights)
+        rot_vec = rotation.as_rotvec()
+        pcd_r = deepcopy(pcd)
+        pcd_r.rotate(rotation.as_matrix(), center=(0, 0, 0))
 
         # Move zero point to the new origin
-        new_origin = pcd.points[origin_idx]
+        new_origin = pcd_r.points[origin_idx]
         # Wat to move to 0 so oposite of current position
-        pcd_tx = pcd.translate(new_origin * -1)
+        pcd_tx = pcd_r.translate(new_origin * -1)
         output_filename = str(Path.joinpath(output_folder, filename.stem + "_recentered.ply"))
         o3d.io.write_point_cloud(output_filename, pcd_tx)
 
